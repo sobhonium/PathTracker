@@ -1,0 +1,121 @@
+name: 🚀 No Gradlew Build (Direct Gradle)
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: 📥 Checkout repository
+      uses: actions/checkout@v4
+
+    - name: ☕ Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+
+    - name: 🔧 Install Gradle
+      run: |
+        wget -q https://services.gradle.org/distributions/gradle-8.4-bin.zip
+        unzip -q gradle-8.4-bin.zip
+        export PATH=$PWD/gradle-8.4/bin:$PATH
+        echo "$PWD/gradle-8.4/bin" >> $GITHUB_PATH
+        gradle --version
+
+    - name: 📱 Setup Android SDK
+      run: |
+        # Setup Android SDK
+        export ANDROID_HOME=$HOME/android-sdk
+        mkdir -p $ANDROID_HOME
+        cd $ANDROID_HOME
+
+        # Download Android SDK command line tools
+        wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+        unzip -q commandlinetools-linux-11076708_latest.zip
+        rm commandlinetools-linux-11076708_latest.zip
+
+        # Setup directory structure
+        mkdir -p cmdline-tools/latest
+        mv cmdline-tools/* cmdline-tools/latest/ 2>/dev/null || true
+
+        # Set environment variables
+        echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+        echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_PATH
+        echo "$ANDROID_HOME/platform-tools" >> $GITHUB_PATH
+
+        # Accept licenses and install components
+        yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platform-tools"
+        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-34"
+        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "build-tools;34.0.0"
+
+    - name: 🔍 Verify Environment
+      run: |
+        echo "Java version:"
+        java -version
+        echo "Gradle version:"
+        gradle --version
+        echo "Android SDK:"
+        echo $ANDROID_HOME
+        ls -la $ANDROID_HOME/platforms/ || echo "No platforms found"
+        ls -la $ANDROID_HOME/build-tools/ || echo "No build-tools found"
+
+    - name: 🏗️ Build APK with Direct Gradle
+      run: |
+        echo "Building PathTracker APK..."
+        echo "Current directory: $(pwd)"
+        echo "Project files:"
+        ls -la
+
+        # Clean and build
+        gradle clean --stacktrace
+        gradle assembleDebug --stacktrace --info
+
+    - name: 🔍 Find APK Files
+      run: |
+        echo "Searching for APK files..."
+        find . -name "*.apk" -type f -exec ls -la {} \; || echo "No APK files found"
+
+        echo "Build outputs directory:"
+        ls -la app/build/outputs/ || echo "No build outputs directory"
+
+        echo "APK directory:"
+        ls -la app/build/outputs/apk/ || echo "No APK directory"
+
+        echo "Debug APK directory:"
+        ls -la app/build/outputs/apk/debug/ || echo "No debug APK directory"
+
+    - name: 📤 Upload APK
+      uses: actions/upload-artifact@v4
+      if: success()
+      with:
+        name: PathTracker-Direct-Gradle-APK
+        path: |
+          app/build/outputs/apk/debug/*.apk
+          app/build/outputs/apk/debug/
+        retention-days: 30
+        if-no-files-found: warn
+
+    - name: 📊 Build Summary
+      if: always()
+      run: |
+        echo "🔍 Final Build Summary:"
+        APK_FILES=$(find . -name "*.apk" -type f)
+        if [ -n "$APK_FILES" ]; then
+          echo "✅ APK files found:"
+          echo "$APK_FILES" | while read apk; do
+            echo "📍 $apk ($(du -h "$apk" | cut -f1))"
+          done
+        else
+          echo "❌ No APK files were generated"
+          echo "📂 Available build artifacts:"
+          find app/build -type f -name "*.jar" -o -name "*.aar" -o -name "*.aab" 2>/dev/null || echo "No build artifacts found"
+
+          echo "📄 Build logs (if any):"
+          find . -name "*.log" 2>/dev/null || echo "No log files found"
+        fi

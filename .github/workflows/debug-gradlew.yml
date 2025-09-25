@@ -1,0 +1,86 @@
+name: 🔍 Debug Gradlew Issue
+
+on:
+  workflow_dispatch:
+
+jobs:
+  debug:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: 📥 Checkout repository
+      uses: actions/checkout@v4
+
+    - name: ☕ Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+
+    - name: 🔍 Examine Gradlew Files
+      run: |
+        echo "=== Examining gradlew setup ==="
+
+        echo "Current directory contents:"
+        ls -la
+
+        echo "gradlew file:"
+        ls -la gradlew || echo "gradlew not found"
+
+        echo "gradlew permissions:"
+        stat gradlew || echo "Cannot stat gradlew"
+
+        echo "gradlew file type:"
+        file gradlew || echo "Cannot determine gradlew file type"
+
+        echo "gradlew first few lines:"
+        head -20 gradlew || echo "Cannot read gradlew"
+
+        echo "Wrapper directory:"
+        ls -la gradle/wrapper/ || echo "gradle/wrapper directory not found"
+
+        echo "Wrapper jar size:"
+        ls -la gradle/wrapper/gradle-wrapper.jar || echo "gradle-wrapper.jar not found"
+
+        echo "Wrapper properties:"
+        cat gradle/wrapper/gradle-wrapper.properties || echo "gradle-wrapper.properties not found"
+
+    - name: 🧪 Test Gradlew Execution
+      run: |
+        echo "=== Testing gradlew execution ==="
+
+        chmod +x ./gradlew
+
+        echo "Trying gradlew --version:"
+        ./gradlew --version || echo "gradlew --version failed"
+
+        echo "Trying gradlew tasks:"
+        ./gradlew tasks || echo "gradlew tasks failed"
+
+        echo "Trying gradlew help:"
+        ./gradlew help || echo "gradlew help failed"
+
+    - name: 🔧 Manual Gradle Test
+      run: |
+        echo "=== Testing manual gradle installation ==="
+
+        # Install gradle manually
+        wget -q https://services.gradle.org/distributions/gradle-8.4-bin.zip
+        unzip -q gradle-8.4-bin.zip
+        ./gradle-8.4/bin/gradle --version
+
+        echo "Manual gradle available at: $PWD/gradle-8.4/bin/gradle"
+
+    - name: 📋 Environment Info
+      run: |
+        echo "=== Environment Information ==="
+        echo "Java version:"
+        java -version
+        echo "Java home:"
+        echo $JAVA_HOME
+        echo "PATH:"
+        echo $PATH
+        echo "Working directory:"
+        pwd
+        echo "User:"
+        whoami
