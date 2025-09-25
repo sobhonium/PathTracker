@@ -1,0 +1,145 @@
+name: ⚡ Minimal Build (Final Solution)
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: 📥 Checkout
+      uses: actions/checkout@v4
+
+    - name: ☕ Setup Java 17
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+
+    - name: 🚫 Clear All Android Environment Variables
+      run: |
+        # Explicitly unset ALL Android-related environment variables
+        env | grep -i android || true
+
+        # Clear from current environment
+        unset ANDROID_HOME
+        unset ANDROID_SDK_ROOT
+        unset ANDROID_SDK_HOME
+        unset ANDROID_NDK_HOME
+        unset ANDROID_NDK_ROOT
+        unset ANDROID_NDK_LATEST_HOME
+
+        echo "All Android environment variables cleared"
+
+    - name: 📱 Minimal Android SDK Setup
+      run: |
+        # Use a completely new directory to avoid any conflicts
+        NEW_SDK_DIR="/tmp/clean-android-sdk"
+        mkdir -p $NEW_SDK_DIR
+        cd $NEW_SDK_DIR
+
+        # Download Android SDK
+        wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+        unzip -q commandlinetools-linux-11076708_latest.zip
+
+        # Setup directory structure
+        mkdir -p cmdline-tools/latest
+        mv cmdline-tools/* cmdline-tools/latest/ 2>/dev/null || true
+
+        # Set ONLY this environment variable
+        echo "ANDROID_HOME=$NEW_SDK_DIR" >> $GITHUB_ENV
+        echo "$NEW_SDK_DIR/cmdline-tools/latest/bin" >> $GITHUB_PATH
+        echo "$NEW_SDK_DIR/platform-tools" >> $GITHUB_PATH
+
+        # Accept licenses and install minimal components
+        yes | $NEW_SDK_DIR/cmdline-tools/latest/bin/sdkmanager --licenses
+        $NEW_SDK_DIR/cmdline-tools/latest/bin/sdkmanager "platform-tools"
+        $NEW_SDK_DIR/cmdline-tools/latest/bin/sdkmanager "platforms;android-34"
+        $NEW_SDK_DIR/cmdline-tools/latest/bin/sdkmanager "build-tools;34.0.0"
+
+    - name: 📋 Create local.properties
+      run: |
+        # Create local.properties file to explicitly set SDK location
+        # This overrides any environment variable conflicts
+        cat > local.properties << 'EOF'
+sdk.dir=/tmp/clean-android-sdk
+EOF
+
+        echo "Created local.properties:"
+        cat local.properties
+
+    - name: 🔍 Environment Check
+      run: |
+        echo "=== Final Environment Check ==="
+        echo "ANDROID_HOME: ${ANDROID_HOME:-'NOT SET'}"
+        echo "ANDROID_SDK_ROOT: ${ANDROID_SDK_ROOT:-'NOT SET'}"
+        echo "local.properties exists: $([ -f local.properties ] && echo 'YES' || echo 'NO')"
+
+        if [ -f local.properties ]; then
+          echo "local.properties content:"
+          cat local.properties
+        fi
+
+        echo "SDK directory contents:"
+        ls -la /tmp/clean-android-sdk/ 2>/dev/null || echo "SDK directory not found"
+
+    - name: 🏗️ Install System Gradle
+      run: |
+        # Use Ubuntu's gradle package to avoid wrapper issues
+        sudo apt-get update -qq
+        sudo apt-get install -y gradle
+
+        echo "Gradle version:"
+        gradle --version
+
+        # Remove any wrapper files to force system gradle usage
+        rm -f ./gradlew ./gradlew.bat gradle/wrapper/gradle-wrapper.jar
+
+    - name: 🔨 Build APK
+      env:
+        # Explicitly set environment for this step
+        ANDROID_HOME: /tmp/clean-android-sdk
+      run: |
+        echo "Starting build with minimal setup..."
+        echo "Working directory: $(pwd)"
+        echo "Gradle command: $(which gradle)"
+
+        # Clean first
+        gradle clean --info --no-daemon
+
+        # Build debug APK
+        gradle assembleDebug --info --no-daemon --stacktrace
+
+    - name: 🔍 Find APK
+      run: |
+        echo "Searching for generated APK..."
+        find . -name "*.apk" -type f -exec ls -la {} \; 2>/dev/null || echo "No APK files found"
+
+        # Check specific location
+        if [ -f app/build/outputs/apk/debug/app-debug.apk ]; then
+          echo "✅ APK FOUND!"
+          ls -la app/build/outputs/apk/debug/app-debug.apk
+          echo "Size: $(du -h app/build/outputs/apk/debug/app-debug.apk | cut -f1)"
+        else
+          echo "❌ APK not found in expected location"
+          echo "Contents of app/build/outputs/:"
+          find app/build/outputs/ -type f 2>/dev/null || echo "No build outputs found"
+        fi
+
+    - name: 📤 Upload APK
+      uses: actions/upload-artifact@v4
+      if: success()
+      with:
+        name: PathTracker-Minimal-APK
+        path: app/build/outputs/apk/debug/app-debug.apk
+        retention-days: 30
+
+    - name: 🎉 Success Message
+      if: success()
+      run: |
+        echo "🎉 SUCCESS! PathTracker APK built with minimal setup!"
+        echo "📱 Your Android app is ready for installation!"
+        echo "📍 Download from the Artifacts section above"
