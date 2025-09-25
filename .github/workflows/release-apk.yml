@@ -1,0 +1,103 @@
+name: 🚀 Release PathTracker APK
+
+on:
+  release:
+    types: [created]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g., v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: 📥 Checkout repository
+      uses: actions/checkout@v4
+
+    - name: ☕ Set up JDK 11
+      uses: actions/setup-java@v3
+      with:
+        java-version: '11'
+        distribution: 'temurin'
+
+    - name: 🏗️ Setup Android SDK
+      uses: android-actions/setup-android@v3
+
+    - name: 📱 Accept Android SDK licenses
+      run: yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
+
+    - name: 🔧 Grant execute permission for gradlew
+      run: chmod +x gradlew
+
+    - name: 🏗️ Build Release APK
+      run: ./gradlew assembleRelease
+
+    - name: 🎯 Sign Release APK
+      uses: r0adkll/sign-android-release@v1
+      id: sign_app
+      with:
+        releaseDirectory: app/build/outputs/apk/release
+        signingKeyBase64: ${{ secrets.SIGNING_KEY }}
+        alias: ${{ secrets.ALIAS }}
+        keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
+        keyPassword: ${{ secrets.KEY_PASSWORD }}
+      env:
+        BUILD_TOOLS_VERSION: "34.0.0"
+
+    - name: 📝 Rename APK
+      run: |
+        cd app/build/outputs/apk/release
+        mv app-release-unsigned-signed.apk PathTracker-${{ github.event.inputs.tag || github.ref_name }}.apk
+
+    - name: 📤 Upload to Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: app/build/outputs/apk/release/PathTracker-*.apk
+        tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+        name: PathTracker ${{ github.event.inputs.tag || github.ref_name }}
+        body: |
+          🚶‍♂️ **PathTracker Android App**
+
+          ## What's New
+          - GPS path recording with high accuracy
+          - Photo capture with location metadata
+          - Comments and rating system
+          - KML export for sharing with Google Earth
+          - Material Design UI
+
+          ## Installation
+          1. Download the APK file below
+          2. Enable "Unknown sources" in Android Settings → Security
+          3. Install the APK on your device
+          4. Grant location and camera permissions
+
+          ## Requirements
+          - Android 7.0 (API level 24) or higher
+          - GPS capability
+          - Camera (optional)
+          - Storage access for KML exports
+
+          ## Features
+          - 📍 Real-time GPS tracking
+          - 📸 Integrated camera
+          - 💬 Location-based comments
+          - ⭐ Experience ratings
+          - 📤 KML sharing
+
+          **Happy walking! 🗺️**
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: 📊 Build Summary
+      run: |
+        APK_PATH=$(find app/build/outputs/apk/release -name "PathTracker-*.apk" | head -1)
+        echo "🎉 Release APK built successfully!"
+        echo "📍 Location: $APK_PATH"
+        echo "📦 Size: $(du -h "$APK_PATH" | cut -f1)"
+        echo "🏷️ Tag: ${{ github.event.inputs.tag || github.ref_name }}"
