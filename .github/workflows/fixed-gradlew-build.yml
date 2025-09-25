@@ -1,0 +1,82 @@
+name: 🔧 Fixed Gradlew Build
+
+on:
+  workflow_dispatch:  # Manual trigger only for testing
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: 📥 Checkout repository
+      uses: actions/checkout@v4
+
+    - name: ☕ Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+
+    - name: 🔧 Setup Gradle Wrapper
+      run: |
+        # Ensure gradlew is executable
+        chmod +x ./gradlew
+
+        # Test gradlew
+        echo "Testing Gradle wrapper..."
+        ./gradlew --version || echo "Gradlew version check failed"
+
+    - name: 🏗️ Setup Gradle Build Action
+      uses: gradle/gradle-build-action@v2
+      with:
+        gradle-version: '8.4'
+
+    - name: 📱 Install Android SDK
+      run: |
+        # Use the gradle-build-action's built-in Android support
+        export ANDROID_HOME=$RUNNER_TEMP/android-sdk
+        mkdir -p $ANDROID_HOME
+
+        # Download Android SDK
+        cd $ANDROID_HOME
+        wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+        unzip -q commandlinetools-linux-11076708_latest.zip
+        rm commandlinetools-linux-11076708_latest.zip
+
+        # Setup directory structure
+        mkdir -p cmdline-tools/latest
+        mv cmdline-tools/* cmdline-tools/latest/ 2>/dev/null || true
+
+        # Set environment variables
+        echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+        echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_PATH
+        echo "$ANDROID_HOME/platform-tools" >> $GITHUB_PATH
+
+        # Install SDK components
+        yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses
+        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
+
+    - name: 🏗️ Build with Gradlew
+      run: |
+        echo "Building with gradlew..."
+        ./gradlew clean --info
+        ./gradlew assembleDebug --stacktrace --info
+
+    - name: 📤 Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: PathTracker-Fixed-Gradlew-APK
+        path: app/build/outputs/apk/debug/*.apk
+        retention-days: 30
+
+    - name: 📊 Build Result
+      if: always()
+      run: |
+        if [ -f app/build/outputs/apk/debug/app-debug.apk ]; then
+          echo "✅ Build successful with gradlew!"
+          ls -la app/build/outputs/apk/debug/app-debug.apk
+        else
+          echo "❌ Build failed"
+          echo "Available files:"
+          find app/build -name "*.apk" 2>/dev/null || echo "No APK files found"
+        fi
