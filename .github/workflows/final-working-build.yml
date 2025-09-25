@@ -38,33 +38,24 @@ jobs:
 
     - name: 📱 Setup Android SDK
       run: |
-        # Setup Android SDK
-        export ANDROID_HOME=/opt/android-sdk
-        sudo mkdir -p $ANDROID_HOME
-        cd $ANDROID_HOME
+        # Use existing SDK and fix environment conflicts
+        export ANDROID_HOME=/usr/local/lib/android/sdk
+        export ANDROID_SDK_ROOT=/usr/local/lib/android/sdk
 
-        # Download Android SDK
-        sudo wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
-        sudo unzip -q commandlinetools-linux-11076708_latest.zip
-        sudo rm commandlinetools-linux-11076708_latest.zip
+        # Clear conflicting environment variables
+        unset ANDROID_SDK_HOME
 
-        # Setup directories
-        sudo mkdir -p cmdline-tools/latest
-        sudo mv cmdline-tools/* cmdline-tools/latest/ 2>/dev/null || true
-
-        # Set permissions
-        sudo chmod -R 755 $ANDROID_HOME
-
-        # Environment variables
+        # Set unified environment variables
         echo "ANDROID_HOME=$ANDROID_HOME" >> $GITHUB_ENV
+        echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
         echo "$ANDROID_HOME/cmdline-tools/latest/bin" >> $GITHUB_PATH
         echo "$ANDROID_HOME/platform-tools" >> $GITHUB_PATH
 
-        # Install components
+        # Install missing components if needed
         yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
-        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platform-tools"
-        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-34"
-        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "build-tools;34.0.0"
+        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platform-tools" || true
+        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "platforms;android-34" || true
+        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "build-tools;34.0.0" || true
 
     - name: 🔍 Verify Setup
       run: |

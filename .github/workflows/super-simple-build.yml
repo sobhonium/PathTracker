@@ -1,0 +1,65 @@
+name: 🎯 Super Simple Build
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: 📥 Checkout
+      uses: actions/checkout@v4
+
+    - name: ☕ Setup Java 17
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+
+    - name: 🏗️ Setup Gradle
+      uses: gradle/gradle-build-action@v2
+
+    - name: 📱 Setup Android SDK (Built-in)
+      uses: android-actions/setup-android@v2.0.10
+
+    - name: 🔧 Fix Environment
+      run: |
+        # Ensure consistent Android SDK environment
+        echo "ANDROID_SDK_ROOT=$ANDROID_HOME" >> $GITHUB_ENV
+
+    - name: ✅ Accept Licenses
+      run: |
+        yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+
+    - name: 🏗️ Direct Gradle Build
+      run: |
+        # Remove gradlew to force direct gradle usage
+        rm -f ./gradlew ./gradlew.bat
+
+        # Install gradle if needed
+        if ! command -v gradle &> /dev/null; then
+          sudo apt-get update
+          sudo apt-get install -y gradle
+        fi
+
+        # Build with direct gradle
+        gradle clean --no-daemon
+        gradle assembleDebug --no-daemon --stacktrace
+
+    - name: 📤 Upload APK
+      uses: actions/upload-artifact@v4
+      if: success()
+      with:
+        name: PathTracker-SuperSimple-APK
+        path: app/build/outputs/apk/debug/app-debug.apk
+        retention-days: 30
+
+    - name: 🎉 Success
+      if: success()
+      run: |
+        echo "🎉 SUCCESS! PathTracker APK built successfully!"
+        ls -la app/build/outputs/apk/debug/app-debug.apk
+        echo "📦 Size: $(du -h app/build/outputs/apk/debug/app-debug.apk | cut -f1)"
